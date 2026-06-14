@@ -170,6 +170,8 @@ public:
 		trainSchedules[trainId].insert(newSchedule);
 	}
 	// Query which train is at a given platform at a specific time.
+    // queries can be further optimised using a shared_mutex with shared_lock for queries and unique_lock for updates,
+    // as queries are more frequent than updates
 	int queryPlatform(int platformId, int timestamp)
 	{
 		// assuminng vector<Schedule> sorted on arrivalTime, return 1st schedule which has
@@ -188,5 +190,15 @@ public:
 };
 int main()
 {
+	AssignmentStrategyI *strategy=new OptimisedAssignment();
+	ScheduleManager testManager({},strategy,3);
+	testManager.assignTrain(0,1,3);
+	testManager.assignTrain(1,1,3);
+	testManager.assignTrain(2,2,4);
+
+	cout<<testManager.queryPlatform(0, 2)<<'\n';
+	cout<<testManager.queryPlatform(1, 2)<<'\n';
+	cout<<testManager.queryPlatform(2, 5)<<'\n';
+
 	return 0;
 }
