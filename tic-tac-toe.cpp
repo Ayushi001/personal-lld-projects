@@ -156,6 +156,7 @@ class GameState {
 public:
 	virtual void next(GameStateContext* ctx, bool isDraw=false, bool hasWon=false )=0;
 	virtual bool isGameOver()=0;
+	virtual string getStateText()=0;
 };
 class WonState:public GameState {
 public:
@@ -166,6 +167,10 @@ public:
 	bool isGameOver() override {
 		return true;
 	}
+	string getStateText()
+	{
+		return "WonState";
+	}
 };
 class DrawState: public GameState {
 public:
@@ -175,6 +180,10 @@ public:
 	}
 	bool isGameOver() override {
 		return true;
+	}
+	string getStateText()
+	{
+		return "DrawState";
 	}
 };
 class InprogressState: public GameState {
@@ -189,6 +198,10 @@ public:
 	bool isGameOver() override {
 		return false;
 	}
+	string getStateText()
+	{
+		return "InprogressState";
+	}
 };
 class UnstartedState: public GameState {
 public:
@@ -200,10 +213,40 @@ public:
 	bool isGameOver()override {
 		return false;
 	}
+	string getStateText()
+	{
+		return "UnstartedState";
+	}
 };
 GameStateContext::GameStateContext() {
 	currentState=new UnstartedState();
 }
+//Observer pattern for all listeners of board event changes
+class GameObserver {
+public:
+	virtual void notifyMove(vector<vector<char>> &board)=0;
+	virtual void onStateChange(GameState* gameState)=0;
+};
+class ConsoleObserver:public GameObserver {
+public:
+	void notifyMove(vector<vector<char>> &board)
+	{
+		cout<<"\nMOVE MADE, current board status:\n";
+		// board->displayBoard();
+		for(int i=0; i<board.size(); i++)
+		{
+			cout<<'\n';
+			for(int j=0; j<board[0].size(); j++)
+			{
+				cout<<board[i][j]<<' ';
+			}
+		}
+	}
+	void onStateChange(GameState* gameState)
+	{
+		cout<<"\nSTATE CHANGED, current state = "<<gameState->getStateText();
+	}
+};
 /*
 Board: vector<vector<char>> board, stack<Move> history
   - void makeMove(Move m)
@@ -218,12 +261,13 @@ class Board {
 	int size;
 	stack<Move*> history;
 	GameStateContext *ctx;
+	GameObserver* gameObserver;
 	bool isMoveValid(Move* m)
 	{
 		if(m->row>=size||m->row<0||m->column>=size||m->row<0)
 			return false;
 		if(board[m->row][m->column]!='\0')
-		return false;
+			return false;
 		return true;
 	}
 	void saveMove(Move* m)
@@ -295,34 +339,45 @@ class Board {
 		return false;
 	}
 public:
-	Board(int n): size(n)
+	Board(int n, GameObserver* gameObserver): size(n), gameObserver(gameObserver)
 	{
 		// initialise an n*n Board
 		board.assign(n,vector<char>(n));
+		for(int i=0; i<n; i++)
+			for(int j=0; j<n; j++)
+			{
+				board[i][j]='\0';
+			}
+		// wrong practice ideally should be passed from constructor params so it can be mocked in unit tests
+		// gameObserver= new ConsoleObserver();
 	}
-	void makeMove(Move* m)
+	bool makeMove(Move* m)
 	{
 		if(!isMoveValid(m))
 		{
 			cout<<"ERROR: Invalid Move\n";
-			return;
+			return false;
 		}
 		board[m->row][m->column]=m->player->symbol;
 		saveMove(m);
+		gameObserver->notifyMove(board);
 		if(hasWon(m))
 		{
 			// change game state and notify observers which player id won
 			ctx->getState()->next(ctx,false,true);
-			cout<<"GAME WON";
-			return;
+			gameObserver->onStateChange(ctx->getState());
+			// cout<<"GAME WON";
+			return true;
 		}
 		if(isDraw(m))
 		{
 			// change game state and notify observers
 			ctx->getState()->next(ctx,true,false);
-			cout<<"GAME Draw";
-			return;
+			// 	cout<<"GAME Draw";
+			gameObserver->onStateChange(ctx->getState());
+			return true;
 		}
+		return true;
 	}
 	void undoMove() {
 		Move* lastMove=history.top();
@@ -341,8 +396,8 @@ public:
 			history.pop();
 		}
 	}
-	int getSize(){
-	    return size;
+	int getSize() {
+		return size;
 	}
 };
 
@@ -365,11 +420,14 @@ public:
 		while(!ctx->getState()->isGameOver())
 		{
 			Player* currentPlayer=players[currPlayerIndex];
-			currPlayerIndex++;
-			currPlayerIndex%=playerCnt;
 
 			Move* move=currentPlayer->getStrategy()->createMove(currentPlayer,board->getSize());
-			board->makeMove(move);
+			bool isSuccess=board->makeMove(move);
+			if(isSuccess)
+			{
+				currPlayerIndex++;
+				currPlayerIndex%=playerCnt;
+			}
 		}
 	}
 	void resetGame() {
@@ -381,12 +439,85 @@ public:
 };
 int main()
 {
-	std::cout<<"Hello World";
+	GameObserver* consoleObs=new ConsoleObserver();
+	Board* board= new Board(3,consoleObs);
+	vector<Player*> players;
+	for(int i=0; i<2; i++)
+	{
+		PlayerStrategy *strategy=NULL;
+		if(i==0)
+			strategy=new HumanPlayerStrategy();
+		else
+			strategy=new RandomPlayerStrategy();
+		Player* player=new Player(i,'a'+i,strategy);
+		players.push_back(player);
+	}
+	GameController *console=new GameController(board, players);
+	console->startGame();
+	// add observer design pattern to get console log notifications to each player for every state change
+	// and display board on every notification
+	// 	std::cout<<"Hello World";
 
 	return 0;
 }
 
 
+/*
+OUTPUT:
+Enter row for human player: 0
+0
+Enter column for human player: 0
+0
 
+MOVE MADE, current board status:
+
+a   
+   
+   
+MOVE MADE, current board status:
+
+a   
+ b  
+   Enter row for human player: 0
+0
+Enter column for human player: 0
+4
+ERROR: Invalid Move
+Enter row for human player: 0
+0
+Enter column for human player: 0
+2
+
+MOVE MADE, current board status:
+
+a  a 
+ b  
+   
+MOVE MADE, current board status:
+
+a b a 
+ b  
+   Enter row for human player: 0
+3
+Enter column for human player: 0
+4
+ERROR: Invalid Move
+Enter row for human player: 0
+2
+Enter column for human player: 0
+2
+
+MOVE MADE, current board status:
+
+a b a 
+ b  
+  a 
+MOVE MADE, current board status:
+
+a b a 
+ b  
+ b a 
+STATE CHANGED, current state = WonState
+*/
 
 
