@@ -79,6 +79,7 @@ public:
 			return false;
 		}
 		productStock[productId]-=quantity;
+		cout<<"\n [INFO]current qty left for selected product:"<<productStock[productId];
 		if(productStock[productId]<threshold)
 		{
 			// alert the admins/inventory observers
@@ -103,7 +104,20 @@ class PaymentStrategy {
 public:
 	PaymentStrategy() {}
 	virtual void setUserBalance(int userDetail)=0;
-	bool processPayment(int amount) {
+	virtual bool processPayment(int amount) =0;
+};
+class UPIPaymentStrategy: public PaymentStrategy {
+	int userBalance;
+public:
+	void setUserBalance(int upiId) override {
+		// api to fetch user balance from input upiId, currently hardcoding
+		userBalance=1000;
+	}
+	bool processPayment(int amount) override {
+		cout<<"\nEnter UPI id: ";
+		int id;
+		cin>>id;
+		setUserBalance(id);
 		if(userBalance<amount)
 		{
 			cout<<"[ERROR] Payment processing failed: Insufficient User balance, min balance needed: "<<amount;
@@ -114,20 +128,26 @@ public:
 		return true;
 	}
 };
-class UPIPaymentStrategy: public PaymentStrategy {
-	int userBalance;
-public:
-	void setUserBalance(int upiId) override {
-		// api to fetch user balance from input upiId, currently hardcoding
-		userBalance=1000;
-	}
-};
 class CardPaymentStrategy: public PaymentStrategy {
 	int userBalance;
 public:
 	void setUserBalance(int cardNumber) override {
 		// api to fetch user balance from input card cardNumber, currently hardcoding
 		userBalance=1000;
+	}
+	bool processPayment(int amount) override {
+		cout<<"\nEnter Card Num: ";
+		int id;
+		cin>>id;
+		setUserBalance(id);
+		if(userBalance<amount)
+		{
+			cout<<"[ERROR] Payment processing failed: Insufficient User balance, min balance needed: "<<amount;
+			return false;
+		}
+		userBalance-=amount;
+		cout<<"[INFO] Transaction Successful";
+		return true;
 	}
 };
 class CashPaymentStrategy: public PaymentStrategy {
@@ -136,6 +156,16 @@ public:
 	void setUserBalance(int cashInput) override {
 		// updates the balance from input cash user inserted in vending machine
 		userBalance=cashInput;
+	}
+	bool processPayment(int amount) override {
+		if(userBalance<amount)
+		{
+			cout<<"[ERROR] Payment processing failed: Insufficient User balance, min balance needed: "<<amount;
+			return false;
+		}
+		userBalance-=amount;
+		cout<<"[INFO] Transaction Successful";
+		return true;
 	}
 };
 
@@ -192,6 +222,9 @@ public:
 	Product* getProductDetails(int productId)
 	{
 		return catalog[productId];
+	}
+	int getSelectedQty() {
+		return selectedQty;
 	}
 };
 
@@ -266,10 +299,11 @@ void InsertCashState::insertCash(VMStateContext* ctx) {
 }
 void ProductSelectionState::selectProduct(VMStateContext* ctx, Product* selectedProduct, int selectedQty) {
 	ctx->setSelectedProduct(selectedProduct);
+	ctx->setSelectedQty(selectedQty);
 	ctx->setState(new PaymentProcessingState());
 }
 void PaymentProcessingState::executeTransaction(VMStateContext *ctx) {
-	bool isSuccess=ctx->getPaymentMode()->processPayment(ctx->getSelectedProduct()->getPrice());
+	bool isSuccess=ctx->getPaymentMode()->processPayment(ctx->getSelectedProduct()->getPrice()*ctx->getSelectedQty());
 	if(!isSuccess)
 	{
 		cout<<"\nTransaction Failed";
@@ -309,12 +343,18 @@ public:
 		cin>>mode;
 		switch(mode)
 		{
-		case 1:
+		case 1: {
 			strategy=new  CashPaymentStrategy();
-		case 2:
+			break;
+		}
+		case 2: {
 			strategy= new UPIPaymentStrategy();
-		case 3:
+			break;
+		}
+		case 3: {
 			strategy= new CardPaymentStrategy();
+			break;
+		}
 		default:
 			cout<<"Invalid input";
 		}
@@ -379,13 +419,40 @@ int main()
 	return 0;
 }
 /*
-OUTPUT:
 Hello World1. CASH, 2.UPI, 3.CARD
 2
-Invalid input[INFO] Cash Insertion not needed, select product nowEnter Product ID: 1
+[INFO] Cash Insertion not needed, select product nowEnter Product ID: 1
 
  Enter Quantity: 5
-[ERROR] Payment processing failed: Insufficient User balance, min balance needed: 20
+
+Enter UPI id: 787
+[INFO] Transaction Successful
+Transaction SucceededDispensing product: Milk
+ [INFO]current qty left for selected product:45[STOCK_ALERT] stock for productId: 1 is45below threshold of: 50Mail sent at: ayushiverma@oncall.com[STOCK_ALERT] stock for productId: 1 is45below threshold of: 50Mail sent at: admin-manager@oncall.com
+[INFO] Vending Complete
+*/
+
+/*
+Hello World1. CASH, 2.UPI, 3.CARD
+1
+Insert Cash: 15
+Enter Product ID: 2
+
+ Enter Quantity: 90
+[ERROR] Payment processing failed: Insufficient User balance, min balance needed: 900
 Transaction Failed[ERROR] let payment process succeed
+[INFO] Vending Complete
+*/
+
+/*
+Hello World1. CASH, 2.UPI, 3.CARD
+1
+Insert Cash: 1000
+Enter Product ID: 2
+
+ Enter Quantity: 90
+[INFO] Transaction Successful
+Transaction SucceededDispensing product: Chocolate
+ [INFO]current qty left for selected product:10[STOCK_ALERT] stock for productId: 2 is10below threshold of: 50Mail sent at: ayushiverma@oncall.com[STOCK_ALERT] stock for productId: 2 is10below threshold of: 50Mail sent at: admin-manager@oncall.com
 [INFO] Vending Complete
 */
