@@ -15,6 +15,9 @@ LLD patterns:
 - Strategy patten for payment processing via cash, card, upi
 - Observer pattern for stock alerts if curr stock below threshold and alerts the admin
 - Facade pattern for user facing VM system class
+
+Optional:
+- can apply singleton design pattern for a logger instance for proper logging
 */
 
 using namespace std;
